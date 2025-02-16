@@ -6,22 +6,36 @@ films_bp = Blueprint('films', __name__)
 
 @films_bp.route('/film/<int:film_id>', methods=['GET'])
 def film_details(film_id):
-    """Fetch details for a specific film."""
+    """Fetch details for a specific film along with its actors."""
     try:
-        query = text("""
+        # Fetch film details
+        film_query = text("""
             SELECT f.film_id, f.title, f.description, f.release_year, l.name AS language, f.rating
             FROM film f
             JOIN language l ON f.language_id = l.language_id
             WHERE f.film_id = :film_id
         """)
-        result = db.session.execute(query, {"film_id": film_id}).mappings().fetchone()
+        film_result = db.session.execute(film_query, {"film_id": film_id}).mappings().fetchone()
         
-        if not result:
+        if not film_result:
             return jsonify({"error": "Film not found"}), 404
-        
-        return jsonify(dict(result))
+
+        film_details = dict(film_result)
+
+        # Fetch actors for the film
+        actor_query = text("""
+            SELECT a.actor_id, a.first_name, a.last_name
+            FROM actor a
+            JOIN film_actor fa ON a.actor_id = fa.actor_id
+            WHERE fa.film_id = :film_id
+        """)
+        actor_results = db.session.execute(actor_query, {"film_id": film_id}).mappings().all()
+        film_details["actors"] = [dict(row) for row in actor_results]
+
+        return jsonify(film_details)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 @films_bp.route('/actor/<int:actor_id>', methods=['GET'])
 def actor_details(actor_id):
