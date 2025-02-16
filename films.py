@@ -1,58 +1,10 @@
-from flask import Flask, jsonify
-from flask_sqlalchemy import SQLAlchemy
+from flask import Blueprint, jsonify, request
 from sqlalchemy import text
-from flask_cors import CORS
+from app import db  # Import the db from the main app
 
-app = Flask(__name__)
+films_bp = Blueprint('films', __name__)
 
-CORS(app, origins=["http://localhost:3000"])
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://flask_backend:Flask%40123@localhost/sakila'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-db = SQLAlchemy(app)
-
-def get_top_rented_films():
-    """Fetch the top 5 most rented films."""
-    query = text("""
-        SELECT f.film_id, f.title, COUNT(r.rental_id) AS rental_count
-        FROM film f
-        JOIN inventory i ON f.film_id = i.film_id
-        JOIN rental r ON i.inventory_id = r.inventory_id
-        GROUP BY f.film_id, f.title
-        ORDER BY rental_count DESC
-        LIMIT 5
-    """)
-    result = db.session.execute(query).mappings().all()
-    return [dict(row) for row in result]
-
-def get_top_actors():
-    """Fetch the top 5 actors with the most films in the store."""
-    query = text("""
-        SELECT a.actor_id, a.first_name, a.last_name, COUNT(fa.film_id) AS film_count
-        FROM actor a
-        JOIN film_actor fa ON a.actor_id = fa.actor_id
-        GROUP BY a.actor_id, a.first_name, a.last_name
-        ORDER BY film_count DESC
-        LIMIT 5
-    """)
-    result = db.session.execute(query).mappings().all()
-    return [dict(row) for row in result]
-
-
-@app.route('/')
-def landing_page():
-    try:
-        top_rented_films = get_top_rented_films()
-        top_actors = get_top_actors()
-        
-        return jsonify({
-            "top_rented_films": top_rented_films,
-            "top_actors": top_actors,
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/film/<int:film_id>', methods=['GET'])
+@films_bp.route('/film/<int:film_id>', methods=['GET'])
 def film_details(film_id):
     """Fetch details for a specific film."""
     try:
@@ -71,8 +23,7 @@ def film_details(film_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
-@app.route('/actor/<int:actor_id>', methods=['GET'])
+@films_bp.route('/actor/<int:actor_id>', methods=['GET'])
 def actor_details(actor_id):
     """Fetch details for a specific actor and their top 5 rented films."""
     try:
@@ -112,3 +63,46 @@ def actor_details(actor_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@films_bp.route('/films', methods=['GET'])
+def search_films():
+    """
+    Search films by film title, actor name, and/or genre.
+    Query parameters:
+      - film: (partial) film title
+      - actor: (partial) actor's first or last name
+      - genre: (partial) genre name
+    """
+    film = request.args.get('film', '')
+    actor = request.args.get('actor', '')
+    genre = request.args.get('genre', '')
+    
+    # Base SQL query
+    query = """
+        SELECT DISTINCT f.film_id, f.title, f.release_year, g.name AS genre
+        FROM film f
+        LEFT JOIN film_actor fa ON f.film_id = fa.film_id
+        LEFT JOIN actor a ON fa.actor_id = a.actor_id
+        LEFT JOIN film_category fc ON f.film_id = fc.film_id
+        LEFT JOIN category g ON fc.category_id = g.category_id
+        WHERE 1=1
+    """
+    
+    params = {}
+    if film:
+        query += " AND f.title LIKE :film"
+        params['film'] = f"%{film}%"
+    if actor:
+        query += " AND (a.first_name LIKE :actor OR a.last_name LIKE :actor)"
+        params['actor'] = f"%{actor}%"
+    if genre:
+        query += " AND g.name LIKE :genre"
+        params['genre'] = f"%{genre}%"
+    
+    query += " LIMIT 50"
+    
+    try:
+        result = db.session.execute(text(query), params).mappings().all()
+        films = [dict(row) for row in result]
+        return jsonify(films)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
