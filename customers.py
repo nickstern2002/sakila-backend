@@ -15,7 +15,7 @@ def get_customers():
         query = text("""
             SELECT customer_id, first_name, last_name, email, phone, created_at
             FROM film_store.customers
-            ORDER BY created_at DESC
+            ORDER BY customer_id DESC
             LIMIT :per_page OFFSET :offset
         """)
         
