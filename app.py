@@ -13,11 +13,13 @@ db = SQLAlchemy(app)
 from landing import landing_bp
 from films import films_bp
 from admin import admin_bp
+from customers import customers_bp
 
 # Register blueprints
 app.register_blueprint(landing_bp)
 app.register_blueprint(films_bp)
 app.register_blueprint(admin_bp)
+app.register_blueprint(customers_bp)
 
 
 if __name__ == '__main__':
