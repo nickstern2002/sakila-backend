@@ -105,3 +105,32 @@ def add_customer():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+
+@customers_bp.route("/<int:customer_id>", methods=["DELETE"])
+def delete_customer(customer_id):
+    """Deletes a customer and their associated rentals and payments."""
+    try:
+        # Start a transaction
+        with db.session.begin():
+            # Step 1: Delete payments related to the customer
+            delete_payments = text("DELETE FROM sakila.payment WHERE customer_id = :customer_id")
+            db.session.execute(delete_payments, {"customer_id": customer_id})
+
+            # Step 2: Delete rentals related to the customer
+            delete_rentals = text("DELETE FROM sakila.rental WHERE customer_id = :customer_id")
+            db.session.execute(delete_rentals, {"customer_id": customer_id})
+
+            # Step 3: Delete the customer
+            delete_customer_query = text("DELETE FROM sakila.customer WHERE customer_id = :customer_id")
+            result = db.session.execute(delete_customer_query, {"customer_id": customer_id})
+
+            # Check if a customer was actually deleted
+            if result.rowcount == 0:
+                return jsonify({"error": "Customer not found"}), 404
+
+        return jsonify({"message": "Customer deleted successfully"}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
