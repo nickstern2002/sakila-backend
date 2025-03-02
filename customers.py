@@ -164,3 +164,42 @@ def delete_customer(customer_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+@customers_bp.route("/<int:customer_id>", methods=["GET"])
+def get_customer_details(customer_id):
+    """Retrieves customer details along with their rental history."""
+    try:
+        # Fetch customer details
+        customer_query = text("""
+            SELECT c.customer_id, c.first_name, c.last_name, c.email, 
+                   c.store_id, c.active, a.address, a.address2, 
+                   a.district, a.postal_code, a.phone
+            FROM sakila.customer c
+            JOIN sakila.address a ON c.address_id = a.address_id
+            WHERE c.customer_id = :customer_id
+        """)
+        customer_result = db.session.execute(customer_query, {"customer_id": customer_id}).mappings().fetchone()
+
+        if not customer_result:
+            return jsonify({"error": "Customer not found"}), 404
+
+        customer_details = dict(customer_result)
+
+        # Fetch rental history for the customer
+        rental_query = text("""
+            SELECT f.film_id, f.title, r.rental_date, r.return_date
+            FROM sakila.rental r
+            JOIN sakila.inventory i ON r.inventory_id = i.inventory_id
+            JOIN sakila.film f ON i.film_id = f.film_id
+            WHERE r.customer_id = :customer_id
+            ORDER BY r.rental_date DESC
+        """)
+        rental_results = db.session.execute(rental_query, {"customer_id": customer_id}).mappings().all()
+
+        customer_details["rental_history"] = [dict(row) for row in rental_results]
+
+        return jsonify(customer_details)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
