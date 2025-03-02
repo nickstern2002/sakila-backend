@@ -7,24 +7,53 @@ customers_bp = Blueprint("customers", __name__, url_prefix="/api/customers")
 
 @customers_bp.route("/", methods=["GET"])
 def get_customers():
-    """Retrieves paginated customers."""
+    """Retrieves paginated customers with optional search filters."""
     try:
         page = request.args.get("page", 1, type=int)
         per_page = 5
         offset = (page - 1) * per_page
 
-        query = text("""
+        # Base query
+        query = """
             SELECT customer_id, first_name, last_name, email, store_id, active
             FROM sakila.customer
-            ORDER BY customer_id DESC
-            LIMIT :per_page OFFSET :offset
-        """)
-        
-        result = db.session.execute(query, {"per_page": per_page, "offset": offset}).mappings().all()
+            WHERE 1=1
+        """
+        params = {}
+
+        # Add filters if search parameters exist
+        customer_id = request.args.get("customer_id", type=int)
+        first_name = request.args.get("first_name", "")
+        last_name = request.args.get("last_name", "")
+
+        if customer_id:
+            query += " AND customer_id = :customer_id"
+            params["customer_id"] = customer_id
+        if first_name:
+            query += " AND first_name LIKE :first_name"
+            params["first_name"] = f"%{first_name}%"
+        if last_name:
+            query += " AND last_name LIKE :last_name"
+            params["last_name"] = f"%{last_name}%"
+
+        # Apply ordering, pagination
+        query += " ORDER BY customer_id DESC LIMIT :per_page OFFSET :offset"
+        params["per_page"] = per_page
+        params["offset"] = offset
+
+        result = db.session.execute(text(query), params).mappings().all()
         customers = [dict(row) for row in result]
 
-        total_query = text("SELECT COUNT(*) FROM sakila.customer")
-        total_customers = db.session.execute(total_query).scalar()
+        # Get total count for pagination
+        count_query = "SELECT COUNT(*) FROM sakila.customer WHERE 1=1"
+        if customer_id:
+            count_query += " AND customer_id = :customer_id"
+        if first_name:
+            count_query += " AND first_name LIKE :first_name"
+        if last_name:
+            count_query += " AND last_name LIKE :last_name"
+
+        total_customers = db.session.execute(text(count_query), params).scalar()
         has_next = (page * per_page) < total_customers
 
         return jsonify({
@@ -34,6 +63,7 @@ def get_customers():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 
 @customers_bp.route("/", methods=["POST"])
