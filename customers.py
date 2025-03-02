@@ -203,3 +203,71 @@ def get_customer_details(customer_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@customers_bp.route("/<int:customer_id>", methods=["PUT"])
+def update_customer(customer_id):
+    """Updates a customer's details including address information."""
+    try:
+        data = request.get_json()
+
+        # Extract customer details
+        first_name = data.get("first_name")
+        last_name = data.get("last_name")
+        email = data.get("email")
+        store_id = data.get("store_id")  # Must be 1 or 2
+
+        # Extract address details
+        address = data.get("address")
+        address2 = data.get("address2", None)  # Optional
+        district = data.get("district")
+        city_id = data.get("city_id")  # Must exist
+        postal_code = data.get("postal_code")
+        phone = data.get("phone")
+
+        if not all([first_name, last_name, store_id, address, district, city_id, postal_code, phone]):
+            return jsonify({"error": "Missing required fields"}), 400
+
+        # Start transaction
+        with db.session.begin():
+            # Update customer details
+            update_customer_query = text("""
+                UPDATE sakila.customer 
+                SET first_name = :first_name, last_name = :last_name, email = :email, store_id = :store_id
+                WHERE customer_id = :customer_id
+            """)
+            db.session.execute(update_customer_query, {
+                "customer_id": customer_id,
+                "first_name": first_name,
+                "last_name": last_name,
+                "email": email,
+                "store_id": store_id
+            })
+
+            # Get customer's address_id
+            address_id_query = text("""
+                SELECT address_id FROM sakila.customer WHERE customer_id = :customer_id
+            """)
+            address_id = db.session.execute(address_id_query, {"customer_id": customer_id}).scalar()
+
+            if address_id:
+                # Update address details
+                update_address_query = text("""
+                    UPDATE sakila.address 
+                    SET address = :address, address2 = :address2, district = :district, city_id = :city_id, 
+                        postal_code = :postal_code, phone = :phone
+                    WHERE address_id = :address_id
+                """)
+                db.session.execute(update_address_query, {
+                    "address_id": address_id,
+                    "address": address,
+                    "address2": address2,
+                    "district": district,
+                    "city_id": city_id,
+                    "postal_code": postal_code,
+                    "phone": phone
+                })
+
+        return jsonify({"message": "Customer updated successfully"}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
