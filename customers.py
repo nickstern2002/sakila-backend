@@ -187,7 +187,7 @@ def get_customer_details(customer_id):
 
         # Fetch rental history for the customer
         rental_query = text("""
-            SELECT f.film_id, f.title, r.rental_date, r.return_date
+            SELECT r.rental_id, f.film_id, f.title, r.rental_date, r.return_date
             FROM sakila.rental r
             JOIN sakila.inventory i ON r.inventory_id = i.inventory_id
             JOIN sakila.film f ON i.film_id = f.film_id
