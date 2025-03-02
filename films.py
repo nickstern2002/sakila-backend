@@ -120,3 +120,42 @@ def search_films():
         return jsonify(films)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@films_bp.route('/rentals/rent', methods=['POST'])
+def rent_film():
+    """Handles renting a film to a customer."""
+    try:
+        data = request.get_json()
+        customer_id = data.get("customer_id")
+        film_id = data.get("film_id")
+
+        if not customer_id or not film_id:
+            return jsonify({"error": "Missing customer_id or film_id"}), 400
+
+        # Check if there's an available copy of the film
+        availability_query = text("""
+            SELECT i.inventory_id FROM inventory i
+            LEFT JOIN rental r ON i.inventory_id = r.inventory_id AND r.return_date IS NULL
+            WHERE i.film_id = :film_id AND r.inventory_id IS NULL
+            LIMIT 1
+        """)
+        inventory_result = db.session.execute(availability_query, {"film_id": film_id}).mappings().fetchone()
+
+        if not inventory_result:
+            return jsonify({"error": "No available copies for this film"}), 400
+
+        inventory_id = inventory_result["inventory_id"]
+
+        # Insert rental record
+        rent_query = text("""
+            INSERT INTO rental (rental_date, inventory_id, customer_id, return_date, staff_id)
+            VALUES (NOW(), :inventory_id, :customer_id, NULL, 1)
+        """)
+        db.session.execute(rent_query, {"inventory_id": inventory_id, "customer_id": customer_id})
+        db.session.commit()
+
+        return jsonify({"message": "Rental successful", "inventory_id": inventory_id}), 201
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
