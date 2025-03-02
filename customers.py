@@ -271,3 +271,36 @@ def update_customer(customer_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+@customers_bp.route("/return_rental/<int:rental_id>", methods=["PUT"])
+def return_rental(rental_id):
+    """Marks a rental as returned by setting the return_date to the current timestamp."""
+    try:
+        # Check if the rental exists and hasn't been returned yet
+        rental_check_query = text("""
+            SELECT return_date FROM sakila.rental WHERE rental_id = :rental_id
+        """)
+        rental_result = db.session.execute(rental_check_query, {"rental_id": rental_id}).fetchone()
+
+        if not rental_result:
+            return jsonify({"error": "Rental not found"}), 404
+
+        # If return_date is already set, the rental has been returned
+        if rental_result[0] is not None:
+            return jsonify({"error": "Rental already returned"}), 400
+
+        # Update rental with return_date as current timestamp
+        update_rental_query = text("""
+            UPDATE sakila.rental 
+            SET return_date = NOW() 
+            WHERE rental_id = :rental_id
+        """)
+        db.session.execute(update_rental_query, {"rental_id": rental_id})
+        db.session.commit()
+
+        return jsonify({"message": "Rental returned successfully"}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
