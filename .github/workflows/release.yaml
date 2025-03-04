@@ -1,0 +1,33 @@
+name: Cut Semantic Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  generate-release-tag:
+    name: generate-release-tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      packages: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup nodejs
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.14
+
+      - name: Run Semantic Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npm i
+          npx semantic-release --debug
+
